@@ -6,6 +6,9 @@ from typing import Union
 from typing import Callable
 from pika.adapters.blocking_connection import BlockingChannel
 
+from .exceptions import CallbackNotDefinedError
+from .exceptions import NotEnoughArgsError
+
 CallableType = Union[list[dict], Any]
 
 EXCHANGE_TYPE: str = "topic"
@@ -86,7 +89,7 @@ class RabbitBatchConsumer:
         # callback-функция должна быть передана (она вызывается, при
         #   получении данных из очереди)
         if not callback or not isinstance(callback, Callable):
-            raise Exception("Callback must be declared")
+            raise CallbackNotDefinedError("Callback must be declared")
         # Проверка наличия всех необходимых параметров подключения
         if host and port and exchange and queue and username and password:
             connection = pika.BlockingConnection(
@@ -109,7 +112,7 @@ class RabbitBatchConsumer:
             self._channel = channel
             self._queue = queue
         else:
-            raise Exception("Not enough connections params")
+            raise NotEnoughArgsError("Not enough connection params")
         self._max_count = max_count
         self._buffer = []
         self._callback = callback
