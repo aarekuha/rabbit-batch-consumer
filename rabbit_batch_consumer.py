@@ -12,7 +12,7 @@ EXCHANGE_TYPE: str = "topic"
 HEARTBEAT: int = 600
 
 
-class RabbitBatchCollector:
+class RabbitBatchConsumer:
     """
     Батчевый консьюмер RabbitMQ
     Подключение к очереди, сбор данных в буффер для порционирования
@@ -53,7 +53,7 @@ class RabbitBatchCollector:
         def worker_func(items: list[dict]) -> None:
             print(f"{items=}")
 
-        RabbitBatchCollector(
+        RabbitBatchConsumer(
             max_count=5,
             timeout=3,
             callback=worker_func,
@@ -62,7 +62,7 @@ class RabbitBatchCollector:
             queue="test",
             username="root",
             password="root",
-        ).consume()
+        ).run()
 
     """
     _max_count: int
@@ -144,7 +144,7 @@ class RabbitBatchCollector:
                 callback(buffer)
                 buffer.clear()
 
-    def consume(self) -> None:
+    def run(self) -> None:
         """
         Сбор данных из RabbitMQ и их размещение в промежуточном буфере, для последующей
             доставки в callback-функцию по timeout'у или при достижении максимального
