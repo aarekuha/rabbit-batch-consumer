@@ -1,5 +1,6 @@
 import time
 import pika
+import json
 
 
 HOST: str = "localhost"
@@ -28,9 +29,13 @@ channel.queue_bind(exchange=EXCHANGE, queue=QUEUE)
 
 for i in range(TEST_MESSAGES_COUNT):
     time.sleep(MESSAGE_SEND_DELAY)
+    body = {
+        "attr1": str(i * 4),
+        "attr2": str(chr(1000 + i * 2)),
+    }
     channel.basic_publish(
         exchange=EXCHANGE,
-        routing_key=QUEUE,
-        body=str(i),
+        routing_key=f"{QUEUE}.{i}",
+        body=json.dumps(body),
     )
-    print(f"Published: {i}")
+    print(f"Published: {body}")
