@@ -9,20 +9,24 @@
 ```python
     from contextlib import suppress
 
-    from .rabbit_batch_consumer import RabbitBatchConsumer
+    from rabbit_batch_consumer import RabbitBatchConsumer
+    from rabbit_item import RabbitItem
 
     with suppress(KeyboardInterrupt):
-        def worker_func(items: list[dict]) -> None:
-            print(f"{items=}")
+        def worker_func(items: list[RabbitItem]) -> None:
+            print(f"{len(items)}")
+            for item in items:
+                print(f"{item.routing_key=}, {item.message=}")
 
         RabbitBatchConsumer(
             max_count=5,
-            timeout=3,
             callback=worker_func,
+            username="root",
+            password="root",
             host="localhost",
             exchange="topics",
             queue="test",
-            username="root",
-            password="root",
+            routing_keys=["test.*", "notest2"],
+            timeout=3,
         ).run()
 ```
