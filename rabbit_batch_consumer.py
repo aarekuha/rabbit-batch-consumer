@@ -3,6 +3,7 @@ import pika
 import json
 import pickle
 import threading
+from threading import Lock
 from typing import Any
 from typing import Union
 from typing import Callable
@@ -17,7 +18,6 @@ from rabbit_item import RabbitItem
 CallableType = Union[list[RabbitItem], Any]
 
 EXCHANGE_TYPE: str = "topic"
-PREFETCH_COUNT: int = 100
 HEARTBEAT: int = 600
 
 
@@ -83,6 +83,7 @@ class RabbitBatchConsumer:
     _callback: Callable[[CallableType], None]
     _channel: BlockingChannel
     _queue: str
+    _callable_lock: Lock
 
     def __init__(
         self,
@@ -120,7 +121,7 @@ class RabbitBatchConsumer:
                 exchange=exchange,
                 exchange_type=EXCHANGE_TYPE,
             )
-            channel.basic_qos(prefetch_count=PREFETCH_COUNT)
+            channel.basic_qos(prefetch_count=max_count)
             # Связка с масками по routing_key
             for routing_key in routing_keys or []:
                 channel.queue_bind(
@@ -137,12 +138,14 @@ class RabbitBatchConsumer:
         self._callback = callback
         # Запуск процесса мониторинга достижения timeout'а и вызова
         #   callback'а до достижения лимита сообщений в буфере
+        self._callable_lock = Lock()
         self._timeout_watcher_thread = threading.Thread(
             target=self._timeout_watcher,
             kwargs={
                 "timeout": timeout,
                 "callback": self._callback,
                 "buffer": self._buffer,
+                "callable_lock": self._callable_lock,
             },
         )
         self._timeout_watcher_thread.daemon = True
@@ -154,6 +157,7 @@ class RabbitBatchConsumer:
         timeout: float,
         callback: Callable[[CallableType], None],
         buffer: CallableType,
+        callable_lock: Lock,
     ) -> None:
         """
         Вызов Callback'а по timeout'у
@@ -164,8 +168,9 @@ class RabbitBatchConsumer:
         while True:
             time.sleep(timeout)
             if buffer:
-                callback(buffer)
-                buffer.clear()
+                with callable_lock:
+                    callback(buffer)
+                    buffer.clear()
 
     def run(self) -> None:
         """
@@ -175,7 +180,7 @@ class RabbitBatchConsumer:
         """
         body: Union[bytes, None]
         method: Union[Basic.Deliver, None]
-        for method, _, body in self._channel.consume(self._queue, auto_ack=True):
+        for method, _, body in self._channel.consume(self._queue):
             if not body or not method:
                 continue
             # Попытка десериализации полученных данных (тип RabbitItem.message)
@@ -192,9 +197,34 @@ class RabbitBatchConsumer:
                 RabbitItem(
                     routing_key=method.routing_key,
                     message=message,
+                    delivery_tag=method.delivery_tag,
                 )
             )
             # Проверка достижения лимита сообщений в буфере до вызова callback'а
             if len(self._buffer) >= self._max_count:
-                self._callback(self._buffer[:self._max_count])
-                self._buffer.clear()
+                with self._callable_lock:
+                    self._callback(self._buffer[:self._max_count])
+                    last_delivery_tag: int = self._buffer[-1].delivery_tag
+                    self._channel.basic_ack(delivery_tag=last_delivery_tag, multiple=True)
+                    self._buffer.clear()
+
+
+from contextlib import suppress
+
+with suppress(KeyboardInterrupt):
+    def worker_func(items: list[RabbitItem]) -> None:
+        print(f"{len(items)}")
+        for item in items:
+            print(f"{item.routing_key=}, {item.message=}, {item.delivery_tag=}")
+
+    RabbitBatchConsumer(
+        max_count=5,
+        callback=worker_func,
+        username="root",
+        password="root",
+        host="localhost",
+        exchange="topics",
+        queue="test",
+        routing_keys=["test.*", "notest2"],
+        timeout=0.001,
+    ).run()

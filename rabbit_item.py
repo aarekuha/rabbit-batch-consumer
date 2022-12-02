@@ -6,3 +6,4 @@ from dataclasses import dataclass
 class RabbitItem:
     routing_key: str
     message: Union[dict, bytes]
+    delivery_tag: int
