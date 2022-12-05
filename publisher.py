@@ -10,7 +10,7 @@ PASSWORD: str = "root"
 EXCHANGE: str = "topics"
 EXCHANGE_TYPE: str = "topic"
 QUEUE: str = "test"
-TEST_MESSAGES_COUNT: int = 700000
+TEST_MESSAGES_COUNT: int = 123
 MESSAGE_SEND_DELAY: float = 0.01
 
 connection = pika.BlockingConnection(
